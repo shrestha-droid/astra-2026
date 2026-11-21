@@ -61,18 +61,15 @@ function sunDirEci(ms: number) {
 }
 
 function Earth({ simRef }: { simRef: MutableRefObject<number> }) {
-  const [day, lights, clouds] = useTexture([
+  const [day, lights] = useTexture([
     "/textures/earth_atmos_2048.jpg", "/textures/earth_lights_2048.png",
-    "/textures/earth_clouds_1024.png",
   ]);
   useMemo(() => { day.colorSpace = THREE.SRGBColorSpace; lights.colorSpace = THREE.SRGBColorSpace; day.anisotropy = 8; }, [day, lights]);
   const light = useRef<THREE.DirectionalLight>(null);
-  const cloudRef = useRef<THREE.Mesh>(null);
   useFrame(() => {
     const ms = simRef.current;
     const d = sunDirEci(ms).applyAxisAngle(Y, -gmstAt(ms)).multiplyScalar(60);
     light.current?.position.copy(d);
-    if (cloudRef.current) cloudRef.current.rotation.y = (ms / 1000) * 2e-6;
   });
   return (
     <group>
@@ -83,10 +80,6 @@ function Earth({ simRef }: { simRef: MutableRefObject<number> }) {
         <meshStandardMaterial map={day}
           roughness={0.92} metalness={0.02}
           emissiveMap={lights} emissive="#ffd9a0" emissiveIntensity={0.9} />
-      </mesh>
-      <mesh ref={cloudRef}>
-        <sphereGeometry args={[R * 1.006, 64, 64]} />
-        <meshStandardMaterial alphaMap={clouds} transparent opacity={0.35} depthWrite={false} color="#ffffff" />
       </mesh>
       <mesh scale={1.07}>
         <sphereGeometry args={[R, 64, 64]} />

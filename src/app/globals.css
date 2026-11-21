@@ -75,6 +75,8 @@
   --color-background: var(--bg);
   --color-foreground: var(--fg);
   --font-sans: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-display), ui-serif, Georgia, serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --radius-sm: calc(var(--radius) - 4px);
@@ -318,15 +320,20 @@ body {
 }
 
 .display {
-  font-weight: 200;
-  font-size: clamp(3rem, 8vw, 8.5rem);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(3rem, 8.4vw, 8.75rem);
+  line-height: 0.92;
+  letter-spacing: -0.025em;
 }
+.serif { font-family: var(--font-display), Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+.mono { font-family: var(--font-mono), ui-monospace, monospace; }
 
 .label {
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-muted);
 }
@@ -334,7 +341,7 @@ body {
 /* continuous vertical guides on a pointer-transparent layer (Sylva-style) */
 .guides { position: fixed; inset: 0; pointer-events: none; z-index: 5; display: flex; justify-content: center; }
 .guides > div { width: 100%; max-width: var(--maxw); position: relative; margin-inline: var(--inset); }
-.guides span { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--rule); }
+.guides span { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(233,237,245,0.07); }
 .guides span:nth-child(1) { left: 0; }
 .guides span:nth-child(2) { left: 66%; }
 .guides span:nth-child(3) { right: 0; }
@@ -350,27 +357,27 @@ body {
   box-shadow: 0 30px 80px -30px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 
-/* denser panel for text-heavy UI floating over the globe */
+/* instrument-panel surface: flat, hairline border, small radius */
 .panel {
-  background: linear-gradient(160deg, rgba(10,14,26,0.82), rgba(6,9,18,0.78));
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 1.25rem;
-  backdrop-filter: blur(22px) saturate(1.25);
-  -webkit-backdrop-filter: blur(22px) saturate(1.25);
-  box-shadow: 0 30px 80px -30px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.08);
+  background: rgba(7, 10, 18, 0.86);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0.5rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px -30px rgba(0,0,0,0.9);
 }
 
 .pill {
-  display: inline-flex; align-items: center; gap: .5rem;
-  padding: .55rem 1.1rem; border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.07);
-  backdrop-filter: blur(12px);
-  font-size: .8rem; letter-spacing: .04em; white-space: nowrap;
-  transition: background .25s, border-color .25s;
+  display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap;
+  padding: .5rem .9rem; border: 1px solid rgba(255,255,255,0.22); border-radius: 2px;
+  font-family: var(--font-mono), ui-monospace, monospace; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase;
+  transition: background .2s, border-color .2s, color .2s;
 }
-.pill:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.4); }
-.pill.primary { background: var(--orange); border-color: var(--orange); color: #1a0d03; font-weight: 400; }
+.pill:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.5); }
+.pill.primary { background: var(--orange); border-color: var(--orange); color: #14090a; }
+.pill.primary:hover { background: #ffa05f; }
+.navlink { font-family: var(--font-mono), ui-monospace, monospace; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); transition: color .2s; }
+.navlink:hover { color: var(--fg); }
 
 .scroll-thin::-webkit-scrollbar { width: 6px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 6px; }

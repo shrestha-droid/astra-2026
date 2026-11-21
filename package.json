@@ -9,7 +9,8 @@
     "lint": "eslint",
     "data:fetch": "node scripts/fetch-orbit-data.mjs",
     "data:screen": "node scripts/precompute-conjunctions.mjs",
-    "data:refresh": "node scripts/fetch-orbit-data.mjs && node scripts/precompute-conjunctions.mjs"
+    "data:refresh": "node scripts/fetch-orbit-data.mjs && node scripts/precompute-conjunctions.mjs && node scripts/fetch-insat.mjs",
+    "data:insat": "node scripts/fetch-insat.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

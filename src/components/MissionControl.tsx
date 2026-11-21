@@ -4,8 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, ArrowLeft, CloudSun, Crosshair, Flame, Info, Mountain, Navigation, Pause, Play, Radio,
-  RotateCcw, ScanEye, ShieldAlert, ShieldCheck, Waves, Wind,
+  AlertTriangle, ArrowLeft, CloudSun, Compass, Crosshair, ExternalLink, Info, Navigation, Pause, Play, Radio,
+  RotateCcw, ScanEye, ShieldAlert, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,14 +17,14 @@ import { BRAND } from "@/lib/brand";
 import {
   ConjEvent, Conjunctions, Orbits, ROLE_META, Role, fmtDateTime, fmtDur, fmtTime, loadAll,
 } from "@/lib/orbits";
-import { HelperReport, Readiness, TIER_META, assess, missAfterShift, tierOf } from "@/lib/readiness";
+import { HelperReport, Readiness, TIER_META, assess, missAfterShift, oneInText, tierOf } from "@/lib/readiness";
+import { linkReport } from "@/lib/link";
 import { SCENARIOS, Scenario } from "@/lib/scenarios";
 import { cn } from "@/lib/utils";
 
 const Globe = dynamic(() => import("@/components/Globe"), { ssr: false });
 
 const HOUR = 3600_000;
-const HAZARD_ICON = { Cyclone: Wind, Flood: Waves, Landslide: Mountain, Wildfire: Flame, Earthquake: Activity } as const;
 const ROLE_ICON: Record<Role, typeof Radio> = { eo: ScanEye, weather: CloudSun, comm: Radio, nav: Navigation, science: Info };
 const SPEEDS = [{ l: "1×", v: 1 }, { l: "1 min/s", v: 60 }, { l: "10 min/s", v: 600 }, { l: "1 h/s", v: 3600 }];
 const evKey = (e: ConjEvent) => `${e.satId}-${e.debId}-${e.tca}`;
@@ -41,8 +41,10 @@ export default function MissionControl() {
   const [shift, setShift] = useState(0);
   const [tab, setTab] = useState("brief");
   const [show, setShow] = useState({ debris: true, orbit: true, beams: true });
+  const [insat, setInsat] = useState<{ live: boolean; satellite: string; product: string; capturedAtUtc: string; source: string; imageUrl: string } | null>(null);
 
   const simRef = useRef(0), playingRef = useRef(true), speedRef = useRef(60);
+  useEffect(() => { fetch("/api/insat").then((r) => r.json()).then(setInsat).catch(() => setInsat(null)); }, []);
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
 
@@ -90,6 +92,7 @@ export default function MissionControl() {
 
   const { orbits, conj } = data;
   const selectedHelper = readiness.helpers.find((h) => h.sat.id === selSat);
+  const link = linkReport(orbits, readiness.helpers, scenario.lat, scenario.lon, simMs);
 
   return (
     <div className="relative h-svh w-full overflow-hidden">
@@ -105,20 +108,21 @@ export default function MissionControl() {
 
       {/* top bar */}
       <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-4 py-3 lg:px-6">
-        <div className="glass flex items-center gap-3 rounded-full px-3 py-1.5">
+        <div className="panel flex items-center gap-3 px-3 py-1.5">
           <Link href="/" aria-label="Back to home" className="grid size-7 place-items-center rounded-full bg-white/10 hover:bg-white/20">
             <ArrowLeft className="size-4" />
           </Link>
           <div className="leading-tight">
-            <div className="text-sm font-light tracking-wide">{BRAND.name}</div>
-            <div className="label hidden !text-[10px] sm:block">Disaster-readiness of India&apos;s satellites</div>
+            <div className="serif text-lg leading-none">{BRAND.name}</div>
+            <div className="label mt-1 hidden !text-[9px] sm:block">Team {BRAND.teamNo} · {BRAND.team}</div>
           </div>
         </div>
-        <div className="glass hidden items-center gap-3 rounded-full px-4 py-2 text-xs md:flex">
+        <div className="panel mono hidden items-center gap-3 px-4 py-2 text-[11px] md:flex">
           <span className="size-2 animate-pulse rounded-full bg-emerald-400" />
           <span className="tabular-nums">{fmtDateTime(simMs)}</span>
           <span className="text-white/40">|</span>
-          <span className="text-white/60">orbit data {fmtDateTime(Date.parse(orbits.fetchedAt))} · works offline</span>
+          <span className="text-white/60">orbits {fmtDateTime(Date.parse(orbits.fetchedAt))} · debris {conj.dataAgeDays.debrisMedian} d old</span>
+          {!conj.fresh && <span className="flex items-center gap-1 text-amber-300"><AlertTriangle className="size-3.5" /> stale data</span>}
         </div>
       </header>
 
@@ -129,21 +133,20 @@ export default function MissionControl() {
         {/* LEFT */}
         <aside className="panel scroll-thin w-full shrink-0 space-y-4 overflow-y-auto p-4 lg:w-[340px]">
           <div>
-            <p className="label mb-2">1 · Pick a disaster</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {SCENARIOS.map((s) => {
-                const Icon = HAZARD_ICON[s.hazard]; const on = s.id === scenario.id;
+            <p className="label mb-2">01 &nbsp;Disaster</p>
+            <div className="divide-y divide-white/10 border-y border-white/10">
+              {SCENARIOS.map((s, i) => {
+                const on = s.id === scenario.id;
                 return (
-                  <button key={s.id} onClick={() => pickScenario(s)} title={s.name}
-                    className={cn("flex items-center gap-2 rounded-xl border px-2 py-2 text-left transition",
-                      on ? "border-orange-400/70 bg-orange-400/10" : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.07]")}>
-                    <span className={cn("grid size-7 shrink-0 place-items-center rounded-lg", on ? "bg-orange-400 text-black" : "bg-white/10")}>
-                      <Icon className="size-3.5" />
+                  <button key={s.id} onClick={() => pickScenario(s)}
+                    className={cn("group flex w-full items-baseline gap-3 py-1.5 pl-2 pr-1 text-left transition",
+                      on ? "bg-orange-400/[0.08] shadow-[inset_2px_0_0_#ff8a3d]" : "hover:bg-white/[0.05]")}>
+                    <span className="mono w-4 shrink-0 text-[10px] text-white/35">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className={cn("block truncate text-[13px]", on ? "font-normal text-white" : "text-white/85")}>{s.name}</span>
+                      <span className="block truncate text-[11px] text-white/45">{s.place}</span>
                     </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-normal leading-tight">{s.name}</span>
-                      <span className="block truncate text-[11px] leading-tight text-white/50">{s.place}</span>
-                    </span>
+                    <span className="mono shrink-0 text-[9px] uppercase tracking-wider text-white/35">{s.hazard}</span>
                   </button>
                 );
               })}
@@ -153,7 +156,7 @@ export default function MissionControl() {
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <p className="label">2 · Readiness (next 24 h)</p>
+              <p className="label">02 &nbsp;Readiness, next 24 h</p>
               <Button size="xs" variant="ghost" onClick={() => setEventStart(simRef.current)} title="Run the report from the current clock time">
                 <RotateCcw /> from {fmtTime(simMs)}
               </Button>
@@ -182,10 +185,11 @@ export default function MissionControl() {
         {/* RIGHT */}
         <aside className="panel scroll-thin flex w-full shrink-0 flex-col overflow-hidden p-4 lg:w-[400px]">
           <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="grid w-full grid-cols-3 bg-white/5">
-              <TabsTrigger value="brief">Brief</TabsTrigger>
-              <TabsTrigger value="helpers">Helpers</TabsTrigger>
-              <TabsTrigger value="close">Close calls</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-4 bg-white/5">
+              <TabsTrigger value="brief" className="px-1 text-[12px]">Brief</TabsTrigger>
+              <TabsTrigger value="helpers" className="px-1 text-[12px]">Helpers</TabsTrigger>
+              <TabsTrigger value="close" className="px-1 text-[12px]">Close calls</TabsTrigger>
+              <TabsTrigger value="link" className="px-1 text-[12px]">Rescue link</TabsTrigger>
             </TabsList>
 
             <TabsContent value="brief" className="scroll-thin mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -194,9 +198,22 @@ export default function MissionControl() {
                 <p key={i} className={cn("text-[13px] leading-relaxed", i === 0 ? "font-normal text-white" : "text-white/75")}>{b}</p>
               ))}
               {readiness.swaps.length > 0 && (
-                <div className="rounded-xl border border-amber-300/25 bg-amber-300/5 p-3 text-xs leading-relaxed text-amber-100/90">
+                <div className="rounded-md border border-amber-300/25 bg-amber-300/5 p-3 text-xs leading-relaxed text-amber-100/90">
                   <ShieldAlert className="mb-1 size-4 text-amber-300" />
-                  Flagged satellites are screened from public data. Operators should confirm with precise tracking before acting.
+                  Flags come from a screen of public orbit data (about 1 km accuracy). Operators decide using precise tracking and collision probability.
+                </div>
+              )}
+              {insat && (
+                <div className="overflow-hidden rounded-md border border-white/10 bg-white/[0.03]">
+                  <a href={insat.imageUrl} target="_blank" rel="noreferrer" className="relative block h-44 w-full bg-black"
+                    style={{ backgroundImage: `url(${insat.imageUrl})`, backgroundSize: "270%", backgroundPosition: "44% 40%", backgroundRepeat: "no-repeat" }}
+                    aria-label="Latest INSAT-3DS thermal infrared image of India (opens full image)">
+                    <span className="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-black/60"><ExternalLink className="size-3" /></span>
+                  </a>
+                  <div className="p-2.5 text-[11px] leading-snug text-white/60">
+                    <span className="text-white/90">{insat.satellite}</span> thermal infrared, captured {fmtDateTime(Date.parse(insat.capturedAtUtc))}.
+                    {" "}Data: {insat.source}{insat.live ? " (live)" : " (saved snapshot)"}. INSAT-3DS is one of the weather satellites in this readiness check.
+                  </div>
                 </div>
               )}
             </TabsContent>
@@ -221,26 +238,33 @@ export default function MissionControl() {
             </TabsContent>
 
             <TabsContent value="close" className="scroll-thin mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {!conj.fresh && (
+                <div className="rounded-md border border-amber-300/30 bg-amber-300/10 p-3 text-xs leading-relaxed text-amber-100">
+                  <AlertTriangle className="mb-1 size-4 text-amber-300" />
+                  Fresh debris orbit data is missing, so close-call results are not reliable. Run <code>npm run data:refresh</code> on a machine that can reach celestrak.org.
+                </div>
+              )}
               <p className="text-xs leading-relaxed text-white/55">
-                {events.length} close approaches under {conj.keepKm} km in the next {conj.windowHours} h, from {conj.pairsScreened.toLocaleString("en-IN")} satellite–debris pairs.
+                {events.length} of the fleet&rsquo;s {conj.events.length} close approaches under {conj.keepKm} km involve helper satellites (next {conj.windowHours} h, {conj.pairsScreened.toLocaleString("en-IN")} pairs screened).
+                Orbit elements from {conj.source}, debris median {conj.dataAgeDays.debrisMedian} d old. Tiers: High under 1 km, Elevated 1–5 km, Watch 5–10 km.
               </p>
               {events.map((e) => {
                 const on = selEvent && evKey(selEvent) === evKey(e); const t = TIER_META[tierOf(e.missKm)];
                 return (
-                  <div key={evKey(e)} className={cn("rounded-xl border p-2.5 transition", on ? "border-white/40 bg-white/10" : "border-white/10 bg-white/[0.03] hover:border-white/25")}>
+                  <div key={evKey(e)} className={cn("rounded-md border p-2.5 transition", on ? "border-white/40 bg-white/10" : "border-white/10 bg-white/[0.03] hover:border-white/25")}>
                     <button className="w-full text-left" onClick={() => jumpToEvent(e)}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-[13px] font-normal">{e.sat}</span>
-                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-normal tracking-wide" style={{ background: t.color + "26", color: t.color }}>
+                        <span className="shrink-0 rounded-sm px-1.5 py-0.5 mono text-[10px] font-normal tracking-wide" style={{ background: t.color + "26", color: t.color }}>
                           {t.label} · {e.missKm} km
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-white/55">× {e.debris}</div>
-                      <div className="mt-0.5 text-[11px] text-white/40">{fmtDateTime(Date.parse(e.tca))} · closing at {e.relKms} km/s</div>
+                      <div className="mt-0.5 text-[11px] text-white/40">{fmtDateTime(Date.parse(e.tca))} · {e.relKms} km/s · {oneInText(e.pc)}</div>
                     </button>
                     {on && (
                       <div className="mt-3 border-t border-white/10 pt-3">
-                        <p className="label mb-2">What if we nudge it?</p>
+                        <p className="label mb-2">What if we nudge it</p>
                         <Slider value={[shift]} min={0} max={60} step={1} onValueChange={(v) => setShift(v[0])} />
                         <p className="mt-2 text-xs leading-relaxed text-white/70">
                           {shift === 0
@@ -248,12 +272,57 @@ export default function MissionControl() {
                             : <>Moved {shift}s along track: miss distance <span className="text-white">{e.missKm} km</span> →{" "}
                               <span className="font-normal text-emerald-300">{missAfterShift(e, orbits, shift).toFixed(1)} km</span></>}
                         </p>
-                        <p className="mt-1 text-[11px] leading-snug text-white/40">Illustrative along-track phasing, not a flight-dynamics plan.</p>
+                        <p className="mt-1 text-[11px] leading-snug text-white/40">Illustrative along-track phasing, not a flight-dynamics plan. Collision chance assumes {conj.assumptions.sigmaKm} km position error and a {conj.assumptions.hardBodyKm * 1000} m combined size, so it is illustrative.</p>
                       </div>
                     )}
                   </div>
                 );
               })}
+            </TabsContent>
+
+            <TabsContent value="link" className="scroll-thin mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <p className="text-xs leading-relaxed text-white/55">
+                What a rescue team at {scenario.place} can use right now (clock {fmtTime(simMs)} IST). Positions update with the time slider.
+              </p>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex items-center justify-between">
+                  <p className="label flex items-center gap-1.5" style={{ color: ROLE_META.nav.color }}><Compass className="size-3.5" /> NavIC position fix</p>
+                  <span className="mono rounded-sm px-1.5 py-0.5 text-[11px]"
+                    style={{ background: (link.fix === "Good" ? "#5eead4" : link.fix === "Fair" ? "#ffc857" : "#ff5d6c") + "26", color: link.fix === "Good" ? "#5eead4" : link.fix === "Fair" ? "#ffc857" : "#ff5d6c" }}>
+                    {link.fix}{link.pdop !== null ? ` · PDOP ${link.pdop.toFixed(1)}` : ""}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] leading-snug text-white/50">
+                  {link.nav.filter((n) => !n.flagged).length} NavIC satellites above 10°. PDOP measures satellite geometry (under 3 is good; 4 satellites are the minimum).
+                </p>
+                <div className="mt-2 space-y-1">
+                  {link.nav.map((n) => (
+                    <div key={n.sat.id} className="flex items-center justify-between text-[12px]">
+                      <span className={n.flagged ? "text-red-300" : ""}>{n.sat.name}{n.flagged ? " (flagged)" : ""}</span>
+                      <span className="tabular-nums text-white/55">az {Math.round(n.az)}° · el {Math.round(n.el)}°</span>
+                    </div>
+                  ))}
+                  {link.nav.length === 0 && <p className="text-xs text-white/50">No NavIC satellite above 10° at this site.</p>}
+                </div>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="label flex items-center gap-1.5" style={{ color: ROLE_META.comm.color }}><Radio className="size-3.5" /> Relay dish pointing (SOS / messaging)</p>
+                <p className="mt-1.5 text-[11px] leading-snug text-white/50">
+                  Point a satellite dish or terminal at the highest relay satellite. Azimuth is clockwise from true north; elevation is up from the horizon.
+                </p>
+                <div className="mt-2 space-y-1">
+                  {link.relays.map((n, i) => (
+                    <div key={n.sat.id} className="flex items-center justify-between text-[12px]">
+                      <span>{i === 0 ? <b className="font-normal text-white">Best: </b> : null}{n.sat.name}</span>
+                      <span className="tabular-nums text-white/55">az {Math.round(n.az)}° · el {Math.round(n.el)}°</span>
+                    </div>
+                  ))}
+                  {link.relays.length === 0 && <p className="text-xs text-white/50">No relay satellite above 10° at this site.</p>}
+                </div>
+              </div>
+              <p className="text-[11px] leading-snug text-white/40">
+                A planning aid computed from orbit data. It does not send messages; a real SOS link needs a compatible terminal.
+              </p>
             </TabsContent>
           </Tabs>
         </aside>
@@ -261,14 +330,14 @@ export default function MissionControl() {
 
       {/* bottom controls */}
       <footer className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 px-3 pb-3 lg:px-6">
-        <div className="panel flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-2.5">
+        <div className="panel flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-4 py-2.5">
           <Button size="icon-sm" variant="secondary" onClick={() => setPlaying((p) => !p)} aria-label={playing ? "Pause" : "Play"}>
             {playing ? <Pause /> : <Play />}
           </Button>
           <div className="hidden gap-1 sm:flex">
             {SPEEDS.map((s) => (
               <button key={s.v} onClick={() => setSpeed(s.v)}
-                className={cn("rounded-full px-2.5 py-1 text-[11px] transition", speed === s.v ? "bg-white text-black" : "bg-white/10 text-white/70 hover:bg-white/20")}>
+                className={cn("rounded-sm px-2 py-1 mono text-[10px] transition", speed === s.v ? "bg-white text-black" : "bg-white/10 text-white/70 hover:bg-white/20")}>
                 {s.l}
               </button>
             ))}
@@ -286,7 +355,7 @@ export default function MissionControl() {
         </div>
         <div className="hidden flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] text-white/60 sm:flex">
           {(["eo", "weather", "comm", "nav"] as Role[]).map((r) => (
-            <span key={r} className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: ROLE_META[r].color }} />{ROLE_META[r].label}</span>
+            <span key={r} className="flex items-center gap-1.5"><i className="size-2 rounded-[1px]" style={{ background: ROLE_META[r].color }} />{ROLE_META[r].label}</span>
           ))}
           <span className="flex items-center gap-1.5"><i className="size-2 rounded-full bg-slate-400/60" />Debris</span>
           <span className="flex items-center gap-1.5"><Crosshair className="size-3 text-orange-300" />Disaster zone</span>
@@ -299,24 +368,20 @@ export default function MissionControl() {
 
 function Ring({ score }: { score: number }) {
   const c = score >= 80 ? "#5eead4" : score >= 55 ? "#ffc857" : "#ff5d6c";
-  const r = 46, L = 2 * Math.PI * r;
+  const on = Math.round(score / 5);
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative size-28 shrink-0">
-        <svg viewBox="0 0 110 110" className="size-full -rotate-90">
-          <circle cx="55" cy="55" r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="7" />
-          <circle cx="55" cy="55" r={r} fill="none" stroke={c} strokeWidth="7" strokeLinecap="round"
-            strokeDasharray={L} strokeDashoffset={L * (1 - score / 100)} style={{ transition: "stroke-dashoffset 900ms cubic-bezier(.16,1,.3,1), stroke 400ms" }} />
-        </svg>
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="text-center leading-none">
-            <CountUp key={score} to={score} duration={1.1} trigger="load" className="text-3xl font-extralight" />
-            <div className="label mt-1 !text-[10px]">/ 100</div>
-          </div>
-        </div>
+    <div>
+      <div className="flex items-end gap-3">
+        <CountUp key={score} to={score} duration={1.1} trigger="load" className="serif text-[4.2rem] leading-[0.85]" />
+        <span className="mono pb-1 text-[11px] text-white/45">/ 100</span>
       </div>
-      <p className="text-xs leading-relaxed text-white/60">
-        How well India&apos;s satellites can see, reach and guide a response here — counting only satellites with no flagged close call.
+      <div className="mt-3 flex gap-[3px]" aria-hidden>
+        {Array.from({ length: 20 }, (_, i) => (
+          <i key={i} className="h-2 flex-1 rounded-[1px] transition-colors duration-700" style={{ background: i < on ? c : "rgba(255,255,255,0.1)" }} />
+        ))}
+      </div>
+      <p className="mt-2.5 text-[11px] leading-relaxed text-white/50">
+        A satellite is dropped only if a pass under 1 km is predicted near its window.
       </p>
     </div>
   );
@@ -326,12 +391,12 @@ const dayKey = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asi
 const dayTag = (ms: number, start: number) => (dayKey(ms) === dayKey(start) ? "" : " +1d");
 
 function HelperRow({ h, active, onClick, startMs }: { h: HelperReport; active: boolean; onClick: () => void; startMs: number }) {
-  const flagged = h.status === "conflict", watch = h.status === "watch";
+  const flagged = h.status === "conflict", watch = h.status === "caution";
   const next = h.passes[0];
-  const Icon = flagged ? ShieldAlert : ShieldCheck;
+  const Icon = flagged || watch ? ShieldAlert : ShieldCheck;
   return (
     <button onClick={onClick}
-      className={cn("flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition",
+      className={cn("flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition",
         active ? "border-white/40 bg-white/10" : "border-white/10 bg-white/[0.03] hover:border-white/25")}>
       <Icon className="size-4 shrink-0" style={{ color: flagged ? "#ff5d6c" : watch ? "#ffc857" : "#5eead4" }} />
       <span className="min-w-0 flex-1">

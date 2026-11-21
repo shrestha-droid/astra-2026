@@ -1,7 +1,7 @@
 # ASTRA 2026 - Project Brief (for the team and for any reviewer)
 
 > One self-contained file with everything decided and everything considered, so anyone can review the project cold.
-> Last updated: 21 Nov 2026 (evening, before the Ideation round).
+> Last updated: 21 Nov 2026 (evening, before the Ideation round; after an external review of the live site).
 > **Status: v1 built. Direction = a blend of domains 06 + 03 + 04 (+ 02 as sensor matching). Working name: SatGuard India.**
 
 ---
@@ -108,7 +108,7 @@ dashboard or a rover planner. We answer a different question: can the satellites
 - **Problem:** when a cyclone or flood hits, responders lean on a handful of satellites for imagery, weather, positioning and
   messages. There is no simple answer to "will those satellites be overhead, and safe, when we need them?"
 - **Context:** low Earth orbit is crowded with debris from collisions such as Fengyun-1C and Cosmos 2251. In our 72-hour
-  screening of India's active satellites we found 118 close approaches under 10 km.
+  screening of India's active satellites against fresh debris data we found 102 close approaches under 10 km.
 - **Who is affected:** disaster managers deciding where to look, satellite operators deciding what to protect, and rescue
   teams in areas where mobile networks are down.
 
@@ -127,40 +127,67 @@ dashboard or a rover planner. We answer a different question: can the satellites
   emergency comms 20 + NavIC 20 (4 satellites needed for a fix). Only satellites with no flagged close approach count.
 - **Plain-English brief:** best imaging pass, backup, flagged satellites with suggested swaps, NavIC and comms status.
 - **Helpers tab:** imaging, weather, comms and NavIC satellites with next pass / time in view and a risk tick.
-- **Close calls tab:** 92 events (helpers only) from 118 total, tiered High < 3 km, Elevated < 6 km, Watch < 10 km; click to
-  jump to the closest approach; "What if we nudge it?" slider shows the new miss distance for an along-track shift.
+- **Close calls tab:** events for helper satellites, tiered High < 1 km, Elevated 1-5 km, Watch 5-10 km, each with an
+  illustrative collision chance; click to jump to the closest approach; "What if we nudge it?" slider shows the new miss distance.
+- **Rescue link tab:** NavIC fix quality (PDOP) and dish pointing (azimuth/elevation) to the best relay satellites.
+- **Brief tab** also shows the latest INSAT-3DS thermal image from ISRO MOSDAC.
 
-### Key numbers (bundled snapshot)
-53 Indian satellites (17 imaging, 20 comms, 3 weather, 10 NavIC incl. NVS, 3 science), 4,171 debris objects,
-221,063 pairs screened, 118 close approaches under 10 km in 72 h (4 High, 17 Elevated, 97 Watch; closest 2.35 km).
+### Key numbers (bundled snapshot, fresh CelesTrak data)
+49 Indian satellites (17 imaging, 19 comms, 3 weather, 7 NavIC, 3 science), 2,654 debris objects (median element age 0.7 days),
+130,046 pairs screened, 102 close approaches under 10 km in 72 h (1 High, 20 Elevated, 81 Watch; closest 0.48 km).
 
 ### Method (simple enough to explain to judges)
-1. Public NORAD two-line orbit elements for the Indian fleet (filtered to launches since 2010, known retired removed) and all
-   tracked debris.
-2. SGP4 propagation every 30 s for 72 h. For each satellite-debris pair, local minima of distance under 260 km are refined to
-   1 s -> time of closest approach and miss distance.
-3. Passes over the hazard: elevation >= 45 deg for imagers, >= 10 deg for weather/comms/NavIC.
-4. Risk: a "conflict" = a High/Elevated event within 3 h of a pass (or anytime for geostationary satellites).
-5. What-if: shift the satellite along its orbit by N seconds and re-measure the closest approach (illustrative phasing, not a
-   flight-dynamics plan).
+1. Orbit elements from CelesTrak for the Indian fleet and the debris clouds (Fengyun-1C, Cosmos 2251, Iridium 33, Cosmos 1408).
+   Anything older than 14 days is rejected; failed/retired satellites are excluded; NavIC satellites must be in a
+   geosynchronous-type orbit.
+2. SGP4 propagation every 30 s for 72 h. For each satellite-debris pair, local minima under 260 km are refined by a
+   **continuous search** for the true time of closest approach (not 1 s sampling).
+3. Tiers: High under 1 km, Elevated 1-5 km, Watch 5-10 km. Illustrative collision chance from a small-target Gaussian model
+   assuming 1.5 km position error and 15 m combined size.
+4. Passes over the hazard: elevation >= 45 deg for imagers, >= 10 deg for weather/comms/NavIC.
+5. Readiness: a satellite is dropped only if a High (under 1 km) event is predicted within 3 h of its pass (any time for
+   geostationary). Elevated is a caution (usable, ranked lower, operator should monitor).
+6. What-if: shift the satellite along its orbit by N seconds and re-measure the true closest approach (illustrative phasing, not
+   a flight-dynamics plan).
+7. Rescue link: NavIC PDOP from satellite azimuth/elevation geometry (standard GNSS formula) and dish pointing angles to relays.
+8. INSAT-3DS thermal image pulled from ISRO MOSDAC (`/api/insat`), snapshot fallback.
+
+### External review of the live site (21 Nov evening) and what we did
+A reviewer checked the deployed v1. Their data findings were verified against our files and were **correct**:
+- **Stale debris:** 4,170 of 4,171 debris records were over 14 days old (median 53 days, 1,036 over a year old), because the
+  mirror we used does not refresh debris. All 118 reported close calls depended on those records. **Fixed:** switched to CelesTrak,
+  reject anything over 14 days, regenerated everything. Median debris element age is now 0.7 days.
+- **Miss distances too high:** 1 s sampling at ~14 km/s overstated 60 of 118 events by more than 0.5 km (SARAL x Fengyun debris
+  was reported 3.81 km, true 1.29 km). **Fixed:** continuous minimum search.
+- **Failed satellites listed as helpers:** NVS-02 (stranded orbit), GSAT-6A (contact lost 2018), IRNSS-1D (454-day-old record),
+  IRNSS-1A (clock failure). **Fixed:** freshness filter, NavIC orbit sanity check, explicit exclusion list with reasons.
+- **Readiness logic too blunt:** any close call under 10 km removed a satellite. **Fixed:** tiers (below), only High near a pass
+  removes a satellite, Elevated is a caution, collision chance shown as illustrative.
+- **Gaps against the criteria:** Domain 4 had no working feature -> added the Rescue link tab (NavIC PDOP, dish pointing).
+  Indian data was only a roadmap item -> added a live MOSDAC INSAT-3DS feed. Domain 3 is still a scenario picker (no flood
+  map or rainfall layer yet): next best addition.
+- **One point we did not fully accept:** the review called the Indian portals "mandatory". The slide we photographed says external
+  APIs and datasets are permitted and lists the portals, with an *evaluation priority* for projects that meaningfully use Indian
+  satellite missions and data (the line is cut off). That is a priority, not a stated requirement, but it is worth satisfying.
 
 ### Honest limits (say these before a judge asks)
-- Public elements are accurate to about 1 km -> an **early-warning screen**, not a final collision call.
-- The score is a transparent index, not a probability. Operational status per satellite is **not verified**; verify the
-  fleet list (especially NavIC) before claiming specifics in the pitch.
-- Scenarios are what-ifs on current orbits; they are not live disaster feeds (live hazard feeds such as GDACS / NASA EONET
-  are reachable and are a good next step).
-- No satellite imagery is analysed in v1. Domain 02 is used as sensor matching (radar vs optical for the hazard).
-- Domain 04 is coverage and link status, not a working radio system.
+- Public elements are accurate to about 1 km -> an **early-warning screen**, not a final collision call; collision chance is
+  illustrative.
+- Satellite status comes from CelesTrak's active list plus our short exclusion list; it is **not** an official status.
+- Scenarios are what-ifs on current orbits, not live disaster feeds (GDACS / NASA EONET are reachable; a good next step).
+- No satellite imagery is analysed. Domain 02 is used as sensor matching (radar vs optical for the hazard).
+- The rescue-link tool is a planning aid; it does not transmit messages.
+- CelesTrak connections from our cloud build environment are intermittent. Refresh with `npm run data:refresh` and check
+  `dataAgeDays` in `public/data/conjunctions.json`. The app shows a "stale data" warning if fresh debris elements are missing.
 
 ### Domain mapping
 | Domain | How it is used |
 |---|---|
 | 06 Sustainable space | Core engine: debris screening, risk tiers, what-if |
 | 03 Disaster management | Hazard scenarios, time-critical imaging passes, readiness report |
-| 04 Comms / NavIC | NavIC fix availability and relay-satellite coverage |
+| 04 Comms / NavIC | NavIC fix quality (PDOP), relay coverage and dish pointing for rescue teams |
 | 02 Earth observation | Sensor matching (radar through cloud vs optical) |
-| 01 Indian missions | The whole fleet is Indian (NavIC, Cartosat, RISAT, EOS, INSAT, GSAT, NISAR) |
+| 01 Indian missions | The whole fleet is Indian (NavIC, Cartosat, RISAT, EOS, INSAT, GSAT, NISAR); live INSAT-3DS image from MOSDAC |
 
 ---
 
@@ -173,10 +200,10 @@ with the Next build because of a WASM/Node dependency) · React Bits + GodUI com
 atmospheric depth; deep-space navy `#03050a`, accent orange `#ff8a3d`, cool blue `#7aa7ff`, teal `#5eead4`. Layout notes in
 `design-skills/`.
 
-**Data pipeline (`npm run data:refresh`):** `scripts/fetch-orbit-data.mjs` -> `public/data/orbits.json`;
-`scripts/precompute-conjunctions.mjs` -> `public/data/conjunctions.json`. Source: tle.ivanstanojevic.me (a public mirror
-of NORAD elements; the original CelesTrak site is not reachable from the build environment). Both files are committed, so the
-app works offline.
+**Data pipeline (`npm run data:refresh`):** `scripts/fetch-orbit-data.mjs` -> `public/data/orbits.json` (CelesTrak; mirror only as a
+loud fallback); `scripts/precompute-conjunctions.mjs` -> `public/data/conjunctions.json`; `scripts/fetch-insat.mjs` ->
+`public/data/insat-latest.*` (MOSDAC snapshot). All outputs are committed, so the app works offline. CelesTrak is intermittently
+unreachable from our cloud environment; re-run until `dataAgeDays.debrisMedian` is small and `fresh` is true.
 
 **Repo:** https://github.com/shrestha-droid/astra-2026 (public)
 
@@ -195,13 +222,13 @@ app works offline.
 | 9:00 AM+ | Be ready to demo live and explain every part |
 
 **Deck outline (6-8 slides):** Problem -> Why it matters (India angle) -> Solution -> Live demo screenshot -> How it works
-(data, SGP4, readiness index) -> Impact and scalability -> Roadmap -> Team.
+(fresh CelesTrak data, SGP4, continuous closest-approach search, readiness index) -> Impact and scalability -> Roadmap -> Team.
 
 **3-minute video outline:** 0:00 hook (the question) -> 0:20 pick a cyclone -> 0:50 readiness + brief -> 1:30 flagged satellite and
 swap -> 2:00 what-if slider -> 2:30 limits and next steps -> 2:50 close.
 
 ### Likely judge questions
-- *Is this real data?* Yes: public NORAD elements, 72 h screening of 221,063 pairs. Snapshot bundled for offline use.
+- *Is this real data?* Yes: CelesTrak NORAD elements (median age 0.7 days, anything over 14 days rejected), 72 h screening of 130,046 pairs, plus a live INSAT-3DS image from ISRO MOSDAC.
 - *How accurate?* About 1 km for public data; it is a screening tool. Precise operator data would plug into the same engine.
 - *Who would use it?* Disaster managers and satellite operators; a next step is live feeds and ISRO portal data.
 - *What is original?* Joining disaster response with satellite safety in one readiness check.
@@ -220,7 +247,7 @@ swap -> 2:00 what-if slider -> 2:30 limits and next steps -> 2:50 close.
 > I'm in a 100-point overnight hackathon (ASTRA 2026, space theme, ~14 hours). Judging: Technical 25, Working prototype 20,
 > Presentation 15, Innovation 10, Problem relevance 10, UI/UX 10, Scalability 10. Deliverables: ideation PPT, final PPT,
 > public repo, 3-minute video. We built "SatGuard India": for a chosen disaster scenario it lists which Indian satellites
-> (imaging, weather, NavIC, comms) can help in the next 24 h and screens each against 4,171 tracked debris objects (SGP4 on
-> public elements, 118 close approaches under 10 km in 72 h), with a readiness score and a what-if along-track nudge slider.
+> (imaging, weather, NavIC, comms) can help in the next 24 h and screens each against 2,654 tracked debris objects (SGP4 on
+> CelesTrak elements, 102 close approaches under 10 km in 72 h, with tiers and illustrative collision chance), with a readiness score and a what-if along-track nudge slider.
 > Review the rubric fit, find the weakest scoring areas, and suggest what to add or cut. Challenge whether another domain
 > blend would win more points.

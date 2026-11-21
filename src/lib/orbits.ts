@@ -8,15 +8,21 @@ export interface FleetSat {
   l1: string; l2: string; epoch: string; rec: SatRec; geo: boolean;
 }
 export interface Debris { id: number; name: string; l1: string; l2: string; rec: SatRec }
-export interface Orbits { fleet: FleetSat[]; debris: Debris[]; fetchedAt: string; source: string }
+export interface Orbits {
+  fleet: FleetSat[]; debris: Debris[]; fetchedAt: string; source: string;
+  maxAgeDays: number; warnings: string[];
+  stats: { debrisSeen: number; debrisKept: number; debrisDroppedStale: number; debrisMedianAgeDaysBeforeFilter: number; fleetKept: number };
+}
 
 export interface ConjEvent {
   satId: number; sat: string; role: Role; debId: number; debris: string;
-  tca: string; missKm: number; relKms: number; score: number;
+  tca: string; missKm: number; relKms: number; pc: number; score: number;
 }
 export interface Conjunctions {
   generatedAt: string; windowStart: string; windowHours: number; stepSec: number;
-  keepKm: number; method: string; pairsScreened: number; events: ConjEvent[];
+  keepKm: number; method: string; pairsScreened: number; nSats: number; nDebris: number; events: ConjEvent[];
+  fresh: boolean; source: string; dataAgeDays: { debrisMedian: number; fleetMedian: number };
+  assumptions: { sigmaKm: number; hardBodyKm: number; note: string };
 }
 
 export const ROLE_META: Record<Role, { label: string; color: string; plural: string }> = {
@@ -48,7 +54,10 @@ export function loadAll() {
         ...f, rec: sat.twoline2satrec(f.l1, f.l2), geo: isGeo(f.l2),
       }));
       const debris: Debris[] = (o.debris as RawDebris[]).map((d) => ({ ...d, rec: sat.twoline2satrec(d.l1, d.l2) }));
-      return { orbits: { fleet, debris, fetchedAt: o.fetchedAt, source: o.source } as Orbits, conj: c as Conjunctions };
+      return {
+        orbits: { fleet, debris, fetchedAt: o.fetchedAt, source: o.source, maxAgeDays: o.maxAgeDays ?? 14, warnings: o.warnings ?? [], stats: o.stats } as Orbits,
+        conj: c as Conjunctions,
+      };
     })();
   }
   return cache;
@@ -83,6 +92,18 @@ export function elevationDeg(rec: SatRec, ms: number, latDeg: number, lonDeg: nu
     { latitude: sat.degreesToRadians(latDeg), longitude: sat.degreesToRadians(lonDeg), height: 0 }, ecf,
   );
   return sat.radiansToDegrees(la.elevation);
+}
+
+/** Pointing angles (degrees) from a ground site to a satellite. */
+export function lookAngles(rec: SatRec, ms: number, latDeg: number, lonDeg: number): { az: number; el: number } | null {
+  const d = new Date(ms);
+  const pv = sat.propagate(rec, d);
+  if (!pv || !pv.position || Number.isNaN(pv.position.x)) return null;
+  const la = sat.ecfToLookAngles(
+    { latitude: sat.degreesToRadians(latDeg), longitude: sat.degreesToRadians(lonDeg), height: 0 },
+    sat.eciToEcf(pv.position, sat.gstime(d)),
+  );
+  return { az: (sat.radiansToDegrees(la.azimuth) + 360) % 360, el: sat.radiansToDegrees(la.elevation) };
 }
 
 export function altitudeKm(rec: SatRec, ms: number): number | null {
